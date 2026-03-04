@@ -122,6 +122,14 @@
             background: #f85149;
         }
         
+        button.svg {
+            background: #0969da;
+        }
+        
+        button.svg:hover {
+            background: #218bff;
+        }
+        
         textarea {
             flex: 1;
             background: #0d1117;
@@ -298,6 +306,7 @@ Chemistry: $\ce{H2O + CO2 -> H2CO3}$" spellcheck="false"></textarea>
                     <span class="panel-title">📤 Rendered Output</span>
                     <div class="panel-actions">
                         <button onclick="copyOutput()">📋 Copy HTML</button>
+                        <button class="svg" onclick="downloadSVG()">⬇️ Download SVG</button>
                         <button class="secondary" onclick="copyText()">Copy Text</button>
                     </div>
                 </div>
@@ -305,7 +314,7 @@ Chemistry: $\ce{H2O + CO2 -> H2CO3}$" spellcheck="false"></textarea>
             </div>
         </div>
         
-        <p class="copy-hint">💡 Tip: Copy the rendered output and paste into Word or LibreOffice. For best results, use &quot;Paste Special &gt; HTML&quot; in Word.</p>
+        <p class="copy-hint">💡 <strong>Tip:</strong> For LibreOffice/OpenDocument, click <strong>"Download SVG"</strong> to get a complete HTML file with embedded SVG equations that render perfectly in word processors.</p>
     </div>
     
     <div class="toast" id="toast">Copied to clipboard!</div>
@@ -424,6 +433,95 @@ Chemistry: $\ce{H2O + CO2 -> H2CO3}$" spellcheck="false"></textarea>
             return processed;
         }
         
+        // Process math with SVG output
+        function processMathSVG(text) {
+            // Create placeholders for code blocks and inline code to protect them
+            const codeBlocks = [];
+            const inlineCodes = [];
+            
+            // Extract and store code blocks (```...```)
+            let processed = text.replace(/```[\s\S]*?```/g, (match) => {
+                codeBlocks.push(match);
+                return `\x00CODEBLOCK${codeBlocks.length - 1}\x00`;
+            });
+            
+            // Extract and store inline code (`...`)
+            processed = processed.replace(/`[^`]*`/g, (match) => {
+                inlineCodes.push(match);
+                return `\x00INLINECODE${inlineCodes.length - 1}\x00`;
+            });
+            
+            // Replace block math \[...\] with SVG
+            processed = processed.replace(/\\\[([\s\S]*?)\\\]/g, (match, latex) => {
+                try {
+                    return katex.renderToString(latex.trim(), {
+                        displayMode: true,
+                        throwOnError: false,
+                        strict: false,
+                        output: 'html'
+                    });
+                } catch (e) {
+                    return `<span style="color: red;">Math Error</span>`;
+                }
+            });
+            
+            // Replace block math $$...$$ with SVG
+            processed = processed.replace(/\$\$([\s\S]*?)\$\$/g, (match, latex) => {
+                try {
+                    return katex.renderToString(latex.trim(), {
+                        displayMode: true,
+                        throwOnError: false,
+                        strict: false,
+                        output: 'html'
+                    });
+                } catch (e) {
+                    return `<span style="color: red;">Math Error</span>`;
+                }
+            });
+            
+            // Replace inline math \(...\) with SVG
+            processed = processed.replace(/\\\((.*?)\\\)/gs, (match, latex) => {
+                if (latex.trim().length === 0) return match;
+                try {
+                    return katex.renderToString(latex.trim(), {
+                        displayMode: false,
+                        throwOnError: false,
+                        strict: false,
+                        output: 'html'
+                    });
+                } catch (e) {
+                    return `<span style="color: red;">Math Error</span>`;
+                }
+            });
+            
+            // Replace inline math $...$ with SVG
+            processed = processed.replace(/\$([^$\n]+?)\$/g, (match, latex) => {
+                if (latex.trim().length === 0) return match;
+                try {
+                    return katex.renderToString(latex.trim(), {
+                        displayMode: false,
+                        throwOnError: false,
+                        strict: false,
+                        output: 'html'
+                    });
+                } catch (e) {
+                    return `<span style="color: red;">Math Error</span>`;
+                }
+            });
+            
+            // Restore code blocks
+            processed = processed.replace(/\x00CODEBLOCK(\d+)\x00/g, (match, idx) => {
+                return codeBlocks[parseInt(idx)];
+            });
+            
+            // Restore inline code
+            processed = processed.replace(/\x00INLINECODE(\d+)\x00/g, (match, idx) => {
+                return inlineCodes[parseInt(idx)];
+            });
+            
+            return processed;
+        }
+        
         function renderMath() {
             const text = inputEl.value;
             if (!text.trim()) {
@@ -479,6 +577,108 @@ Chemistry: $\ce{H2O + CO2 -> H2CO3}$" spellcheck="false"></textarea>
                 navigator.clipboard.writeText(html).then(() => {
                     showToast('HTML copied as text');
                 });
+            }
+        }
+        
+        // Convert KaTeX HTML to SVG for LibreOffice
+        async function downloadSVG() {
+            const text = inputEl.value;
+            if (!text.trim()) {
+                showToast('Nothing to export!');
+                return;
+            }
+            
+            try {
+                // Process with HTML output (KaTeX uses SVG internally)
+                let processedText = processMathSVG(text);
+                let html = marked.parse(processedText);
+                
+                // Create a complete HTML document with embedded styles
+                const fullHtml = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Exported Math</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #1f2328;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1, h2, h3, h4 {
+            margin-top: 24px;
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+        h1 { font-size: 2em; border-bottom: 1px solid #d0d7de; padding-bottom: 8px; }
+        h2 { font-size: 1.5em; border-bottom: 1px solid #d0d7de; padding-bottom: 8px; }
+        h3 { font-size: 1.25em; }
+        h4 { font-size: 1em; }
+        p { margin-bottom: 16px; }
+        ul, ol { margin-bottom: 16px; padding-left: 2em; }
+        li { margin-bottom: 4px; }
+        code {
+            background: #f6f8fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 85%;
+        }
+        pre {
+            background: #f6f8fa;
+            padding: 16px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin-bottom: 16px;
+        }
+        pre code { background: none; padding: 0; }
+        blockquote {
+            border-left: 4px solid #d0d7de;
+            padding-left: 16px;
+            margin-left: 0;
+            color: #57606a;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 16px;
+        }
+        th, td {
+            border: 1px solid #d0d7de;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        th { background: #f6f8fa; font-weight: 600; }
+        /* KaTeX styles for proper equation rendering */
+        .katex { font-size: 1.1em; }
+        .katex-display { margin: 1em 0; overflow-x: auto; overflow-y: hidden; }
+        .katex-display .katex { display: block; text-align: center; }
+    </style>
+    <!-- Include KaTeX CSS for proper equation rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+</head>
+<body>
+${html}
+</body>
+</html>`;
+                
+                // Download as HTML file
+                const blob = new Blob([fullHtml], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'markdown-math-export.html';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showToast('HTML file downloaded! Open in LibreOffice');
+            } catch (e) {
+                console.error('Export error:', e);
+                showToast('Error generating file: ' + e.message);
             }
         }
         
