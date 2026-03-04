@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markdown Math & Chemistry Renderer</title>
+    
+    <!-- KaTeX CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    
+    <!-- KaTeX JS -->
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    
+    <!-- mhchem extension for chemistry -->
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/mhchem.min.js"></script>
+    
+    <!-- Marked for Markdown parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <!-- DOMPurify for sanitization -->
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            color: #58a6ff;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #8b949e;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .panels {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            height: calc(100vh - 140px);
+        }
+        
+        .panel {
+            background: #161b22;
+            border-radius: 12px;
+            border: 1px solid #30363d;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .panel-header {
+            background: #21262d;
+            padding: 12px 16px;
+            border-bottom: 1px solid #30363d;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .panel-title {
+            font-weight: 600;
+            font-size: 14px;
+            color: #e6edf3;
+        }
+        
+        .panel-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        button {
+            background: #238636;
+            color: white;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+        
+        button:hover {
+            background: #2ea043;
+        }
+        
+        button.secondary {
+            background: #21262d;
+            border: 1px solid #30363d;
+        }
+        
+        button.secondary:hover {
+            background: #30363d;
+        }
+        
+        button.danger {
+            background: #da3633;
+        }
+        
+        button.danger:hover {
+            background: #f85149;
+        }
+        
+        textarea {
+            flex: 1;
+            background: #0d1117;
+            color: #c9d1d9;
+            border: none;
+            padding: 16px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            resize: none;
+            outline: none;
+        }
+        
+        #output {
+            flex: 1;
+            background: #ffffff;
+            color: #1f2328;
+            padding: 24px;
+            overflow-y: auto;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        /* Markdown styles */
+        #output h1, #output h2, #output h3, #output h4 {
+            margin-top: 24px;
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+        
+        #output h1 { font-size: 2em; border-bottom: 1px solid #d0d7de; padding-bottom: 8px; }
+        #output h2 { font-size: 1.5em; border-bottom: 1px solid #d0d7de; padding-bottom: 8px; }
+        #output h3 { font-size: 1.25em; }
+        #output h4 { font-size: 1em; }
+        
+        #output p {
+            margin-bottom: 16px;
+        }
+        
+        #output ul, #output ol {
+            margin-bottom: 16px;
+            padding-left: 2em;
+        }
+        
+        #output li {
+            margin-bottom: 4px;
+        }
+        
+        #output code {
+            background: #f6f8fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 85%;
+        }
+        
+        #output pre {
+            background: #f6f8fa;
+            padding: 16px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin-bottom: 16px;
+        }
+        
+        #output pre code {
+            background: none;
+            padding: 0;
+        }
+        
+        #output blockquote {
+            border-left: 4px solid #d0d7de;
+            padding-left: 16px;
+            margin-left: 0;
+            color: #57606a;
+        }
+        
+        #output table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 16px;
+        }
+        
+        #output th, #output td {
+            border: 1px solid #d0d7de;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        
+        #output th {
+            background: #f6f8fa;
+            font-weight: 600;
+        }
+        
+        /* KaTeX adjustments */
+        .katex {
+            font-size: 1.1em;
+        }
+        
+        .katex-display {
+            margin: 1em 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+        
+        /* Loading state */
+        .loading {
+            opacity: 0.5;
+        }
+        
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #238636;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+        
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        /* Responsive */
+        @media (max-width: 900px) {
+            .panels {
+                grid-template-columns: 1fr;
+                height: auto;
+            }
+            
+            .panel {
+                height: 400px;
+            }
+        }
+        
+        /* Copy hint */
+        .copy-hint {
+            font-size: 11px;
+            color: #8b949e;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Markdown Math & Chemistry Renderer</h1>
+        <p class="subtitle">Paste Markdown with LaTeX math ($...$) and chemistry (\ce{...}) equations</p>
+        
+        <div class="panels">
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">📥 Input (Markdown)</span>
+                    <div class="panel-actions">
+                        <button class="secondary" onclick="loadExample()">Load Example</button>
+                        <button class="danger" onclick="clearInput()">Clear</button>
+                    </div>
+                </div>
+                <textarea id="input" placeholder="Paste your Markdown here...
+
+Math: $E = mc^2$ or $$\int_a^b f(x) dx$$
+
+Chemistry: $\ce{H2O + CO2 -> H2CO3}$" spellcheck="false"></textarea>
+            </div>
+            
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">📤 Rendered Output</span>
+                    <div class="panel-actions">
+                        <button onclick="copyOutput()">📋 Copy HTML</button>
+                        <button class="secondary" onclick="copyText()">Copy Text</button>
+                    </div>
+                </div>
+                <div id="output"></div>
+            </div>
+        </div>
+        
+        <p class="copy-hint">💡 Tip: Copy the rendered output and paste into Word or LibreOffice. For best results, use &quot;Paste Special &gt; HTML&quot; in Word.</p>
+    </div>
+    
+    <div class="toast" id="toast">Copied to clipboard!</div>
+    
+    <script>
+        const inputEl = document.getElementById('input');
+        const outputEl = document.getElementById('output');
+        const toastEl = document.getElementById('toast');
+        
+        // Wait for KaTeX to load
+        function waitForKaTeX() {
+            return new Promise((resolve) => {
+                if (typeof katex !== 'undefined') {
+                    resolve();
+                } else {
+                    setTimeout(() => waitForKaTeX().then(resolve), 100);
+                }
+            });
+        }
+        
+        // Escape HTML special characters
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Process math in text - handles multiple math syntaxes:
+        // - Block: $$...$$ and \[ ... \]
+        // - Inline: $...$ and \( ... \)
+        // This runs BEFORE markdown parsing to avoid conflicts
+        function processMath(text) {
+            // Create placeholders for code blocks and inline code to protect them
+            const codeBlocks = [];
+            const inlineCodes = [];
+            
+            // Extract and store code blocks (```...```)
+            let processed = text.replace(/```[\s\S]*?```/g, (match) => {
+                codeBlocks.push(match);
+                return `\x00CODEBLOCK${codeBlocks.length - 1}\x00`;
+            });
+            
+            // Extract and store inline code (`...`)
+            processed = processed.replace(/`[^`]*`/g, (match) => {
+                inlineCodes.push(match);
+                return `\x00INLINECODE${inlineCodes.length - 1}\x00`;
+            });
+            
+            // Replace block math \[...\] with rendered HTML (LaTeX display math)
+            processed = processed.replace(/\\\[([\s\S]*?)\\\]/g, (match, latex) => {
+                try {
+                    return katex.renderToString(latex.trim(), {
+                        displayMode: true,
+                        throwOnError: false,
+                        strict: false
+                    });
+                } catch (e) {
+                    return `<span style="color: red; background: #ffebee; padding: 2px 4px; border-radius: 3px;">Math Error: ${escapeHtml(e.message)}</span>`;
+                }
+            });
+            
+            // Replace block math $$...$$ with rendered HTML
+            processed = processed.replace(/\$\$([\s\S]*?)\$\$/g, (match, latex) => {
+                try {
+                    return katex.renderToString(latex.trim(), {
+                        displayMode: true,
+                        throwOnError: false,
+                        strict: false
+                    });
+                } catch (e) {
+                    return `<span style="color: red; background: #ffebee; padding: 2px 4px; border-radius: 3px;">Math Error: ${escapeHtml(e.message)}</span>`;
+                }
+            });
+            
+            // Replace inline math \(...\) with rendered HTML (LaTeX inline math)
+            // Use non-greedy match that stops at \) but allows backslashes inside
+            processed = processed.replace(/\\\((.*?)\\\)/gs, (match, latex) => {
+                if (latex.trim().length === 0) return match;
+                try {
+                    return katex.renderToString(latex.trim(), {
+                        displayMode: false,
+                        throwOnError: false,
+                        strict: false
+                    });
+                } catch (e) {
+                    return `<span style="color: red; background: #ffebee; padding: 1px 3px; border-radius: 2px;">Math Error</span>`;
+                }
+            });
+            
+            // Replace inline math $...$ with rendered HTML
+            // Match $...$ but not $$...$$
+            processed = processed.replace(/\$([^$\n]+?)\$/g, (match, latex) => {
+                // Skip if this looks like a currency or standalone $
+                if (latex.trim().length === 0) return match;
+                try {
+                    return katex.renderToString(latex.trim(), {
+                        displayMode: false,
+                        throwOnError: false,
+                        strict: false
+                    });
+                } catch (e) {
+                    return `<span style="color: red; background: #ffebee; padding: 1px 3px; border-radius: 2px;">Math Error</span>`;
+                }
+            });
+            
+            // Restore code blocks
+            processed = processed.replace(/\x00CODEBLOCK(\d+)\x00/g, (match, idx) => {
+                return codeBlocks[parseInt(idx)];
+            });
+            
+            // Restore inline code
+            processed = processed.replace(/\x00INLINECODE(\d+)\x00/g, (match, idx) => {
+                return inlineCodes[parseInt(idx)];
+            });
+            
+            return processed;
+        }
+        
+        function renderMath() {
+            const text = inputEl.value;
+            if (!text.trim()) {
+                outputEl.innerHTML = '';
+                return;
+            }
+            
+            // Step 1: Process math equations (this replaces $...$ and $$...$$ with HTML)
+            let processedText = processMath(text);
+            
+            // Step 2: Convert markdown to HTML
+            // Marked will skip the HTML from KaTeX and process the rest
+            let html = marked.parse(processedText);
+            
+            // Step 3: Sanitize (allow KaTeX classes and elements)
+            html = DOMPurify.sanitize(html, {
+                ADD_TAGS: ['math', 'mrow', 'mi', 'mo', 'mn', 'msup', 'msub', 'mfrac', 'msqrt', 'mtext', 'annotation'],
+                ADD_ATTR: ['xmlns', 'display', 'style', 'class']
+            });
+            
+            outputEl.innerHTML = html;
+        }
+        
+        // Debounced render
+        let renderTimeout;
+        inputEl.addEventListener('input', () => {
+            clearTimeout(renderTimeout);
+            renderTimeout = setTimeout(renderMath, 100);
+        });
+        
+        // Copy functions
+        function showToast(message) {
+            toastEl.textContent = message;
+            toastEl.classList.add('show');
+            setTimeout(() => toastEl.classList.remove('show'), 2500);
+        }
+        
+        async function copyOutput() {
+            const html = outputEl.innerHTML;
+            const blob = new Blob([html], { type: 'text/html' });
+            const textBlob = new Blob([outputEl.innerText], { type: 'text/plain' });
+            
+            const item = new ClipboardItem({
+                'text/html': blob,
+                'text/plain': textBlob
+            });
+            
+            try {
+                await navigator.clipboard.write([item]);
+                showToast('HTML copied to clipboard!');
+            } catch (e) {
+                // Fallback
+                navigator.clipboard.writeText(html).then(() => {
+                    showToast('HTML copied as text');
+                });
+            }
+        }
+        
+        function copyText() {
+            navigator.clipboard.writeText(outputEl.innerText).then(() => {
+                showToast('Plain text copied!');
+            });
+        }
+        
+        function clearInput() {
+            inputEl.value = '';
+            outputEl.innerHTML = '';
+            inputEl.focus();
+        }
+        
+        function loadExample() {
+            inputEl.value = `# Chemical Reaction Example
+
+## Balanced Equation
+
+The combustion of methane is represented as:
+
+$$\\ce{CH4 + 2O2 -> CO2 + 2H2O}$$
+
+## Ionic Equations
+
+Dissociation in water:
+$\\ce{NaCl ->[H2O] Na+ + Cl-}$
+
+Redox reaction:
+$$\\ce{2MnO4^- + 5C2O4^{2-} + 16H+ -> 2Mn^{2+} + 10CO2 ^ + 8H2O}$$
+
+## Thermodynamics
+
+Gibbs free energy:
+$$\\Delta G = \\Delta H - T\\Delta S$$
+
+Equilibrium constant:
+$K = \\frac{[\\ce{CO2}][\\ce{H2O}]^2}{[\\ce{CH4}][\\ce{O2}]^2}$
+
+## Physics Equations
+
+Einstein's mass-energy equivalence:
+$$E = mc^2$$
+
+Schrödinger equation:
+$$i\\hbar\\frac{\\partial}{\\partial t}\\Psi(\\mathbf{r},t) = \\hat{H}\\Psi(\\mathbf{r},t)$$
+
+---
+
+**Note:** Use $...$ for inline math and $$...$$ for display math.
+For chemistry, use \\ce{...} inside the math delimiters.`;
+            renderMath();
+        }
+        
+        // Initialize
+        waitForKaTeX().then(() => {
+            console.log('KaTeX loaded with mhchem support');
+        });
+    </script>
+</body>
+</html>
